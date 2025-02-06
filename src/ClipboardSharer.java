@@ -45,7 +45,7 @@ public class ClipboardSharer {
         @Override
         public void run() {
             try {
-                byte[] buffer = new byte[6000 * 2];
+                byte[] buffer = new byte[6000];
                 while (!Thread.interrupted()) {
                     DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
                     socket.receive(packet);
@@ -81,7 +81,7 @@ public class ClipboardSharer {
             this.socket = socket;
         }
 
-        private static final int MAX_UDP_PACKET_SIZE = 60000; // 保留一定空间
+        private static final int MAX_UDP_PACKET_SIZE = 3000; // 保留一定空间
 
         @Override
         public void run() {
