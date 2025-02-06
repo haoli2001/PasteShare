@@ -61,7 +61,7 @@ public class ClipboardSharer {
                             // 更新剪切板
                             isRemoteUpdate.set(true);
                             Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
-                            clipboard.setContents(new StringSelection(received), null);
+                            clipboard.setContents(new StringSelection(clipboardContent), null);
                             isRemoteUpdate.set(false);
                             System.out.println("Received clipboard content from " + senderId + ": " + clipboardContent);
                         }
