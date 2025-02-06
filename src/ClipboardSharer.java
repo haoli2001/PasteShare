@@ -2,6 +2,7 @@ import java.awt.Toolkit;
 import java.awt.datatransfer.*;
 import java.io.IOException;
 import java.net.*;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class ClipboardSharer {
@@ -9,7 +10,7 @@ public class ClipboardSharer {
     private static final int PORT = 12345;
     private static final AtomicBoolean isRemoteUpdate = new AtomicBoolean(false);
     private static String lastClipboardContent = "";
-
+    private static  final String deviceId = UUID.randomUUID().toString();
     public static void main(String[] args) {
         try {
             DatagramSocket socket = new DatagramSocket(PORT, InetAddress.getByName("0.0.0.0")); // 监听所有接口
@@ -44,19 +45,28 @@ public class ClipboardSharer {
         @Override
         public void run() {
             try {
-                byte[] buffer = new byte[1024];
+                byte[] buffer = new byte[6000 * 2];
                 while (!Thread.interrupted()) {
                     DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
                     socket.receive(packet);
                     String received = new String(packet.getData(), 0, packet.getLength(), "UTF-8");
 
-                    // 更新剪切板
-                    isRemoteUpdate.set(true);
-                    Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
-                    clipboard.setContents(new StringSelection(received), null);
-                    isRemoteUpdate.set(false);
+                    //解析接收到的消息
+                    if (received.startsWith("ID")) {
+                        String[] split = received.split(":",2);
+                        if (split.length == 2) {
+                            String id = split[1];
+                            if (!id.equals(deviceId)) {
+                                System.out.println("Received and updated clipboard: " + received);
+                                // 更新剪切板
+                                isRemoteUpdate.set(true);
+                                Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
+                                clipboard.setContents(new StringSelection(received), null);
+                                isRemoteUpdate.set(false);
+                            }
+                        }
+                    }
 
-                    System.out.println("Received and updated clipboard: " + received);
                 }
             } catch (IOException | IllegalStateException e) {
                 System.err.println("Error in receiver thread: " + e.getMessage());
@@ -91,10 +101,14 @@ public class ClipboardSharer {
                         }
                         if (!data.equals(lastClipboardContent) && !isRemoteUpdate.get()) {
                             lastClipboardContent = data;
-                            byte[] buffer = data.getBytes("UTF-8");
+
+                            // **发送数据时，带上设备ID**
+                            String message = "[ID]" + deviceId + ":" + data;
+                            byte[] buffer = message.getBytes("UTF-8");
                             DatagramPacket packet = new DatagramPacket(buffer, buffer.length, InetAddress.getByName(BROADCAST_ADDRESS), PORT);
                             socket.send(packet);
-                            System.out.println("Detected new clipboard content: " + data);
+
+                            System.out.println("Sent clipboard content: " + data);
                         }
                     }
                     Thread.sleep(1000);
