@@ -1,4 +1,3 @@
-import javax.sound.midi.Receiver;
 import java.awt.Toolkit;
 import java.awt.datatransfer.*;
 import java.io.IOException;
@@ -11,6 +10,7 @@ public class ClipboardSharer {
     private static final String MULTICAST_ADDRESS = "230.0.0.1";
     private static final int PORT = 12345;
     private static final AtomicBoolean isRemoteUpdate = new AtomicBoolean(false);
+    private static String lastClipboardContent = "";
 
     public static void main(String[] args) {
         try {
@@ -23,9 +23,10 @@ public class ClipboardSharer {
             receiverThread.setDaemon(true); // 设置为守护线程
             receiverThread.start();
 
-            // 监听剪切板变化
-            Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
-            clipboard.addFlavorListener(new ClipboardListener(socket, group));
+            // 启动剪切板轮询线程
+            Thread clipboardPollingThread = new Thread(new ClipboardPoller(socket, group));
+            clipboardPollingThread.setDaemon(true); // 设置为守护线程
+            clipboardPollingThread.start();
 
             // 主线程保持运行
             System.out.println("Clipboard sharing is running. Press Ctrl+C to exit.");
@@ -39,8 +40,6 @@ public class ClipboardSharer {
 
     static class Receiver implements Runnable {
         private final MulticastSocket socket;
-        private static final int MAX_RETRIES = 5;
-        private static final int RETRY_DELAY_MS = 100;
 
         public Receiver(MulticastSocket socket) {
             this.socket = socket;
@@ -55,54 +54,51 @@ public class ClipboardSharer {
                     socket.receive(packet);
                     String received = new String(packet.getData(), 0, packet.getLength(), "UTF-8");
 
-                    // Update clipboard with retry mechanism
+                    // 更新剪切板
                     isRemoteUpdate.set(true);
-                    boolean success = false;
-                    for (int i = 0; i < MAX_RETRIES; i++) {
-                        try {
-                            Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
-                            clipboard.setContents(new StringSelection(received), null);
-                            success = true;
-                            break;
-                        } catch (IllegalStateException e) {
-                            System.err.println("Retry " + (i + 1) + " due to clipboard access error: " + e.getMessage());
-                            Thread.sleep(RETRY_DELAY_MS);
-                        }
-                    }
-                    if (!success) {
-                        System.err.println("Failed to update clipboard after " + MAX_RETRIES + " retries.");
-                    }
+                    Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
+                    clipboard.setContents(new StringSelection(received), null);
                     isRemoteUpdate.set(false);
+
+                    // 打印新增的字符串
+                    System.out.println("Received and updated clipboard: " + received);
                 }
-            } catch (IOException | InterruptedException e) {
+            } catch (IOException | IllegalStateException e) {
                 System.err.println("Error in receiver thread: " + e.getMessage());
             }
         }
     }
-    static class ClipboardListener implements FlavorListener {
+
+    static class ClipboardPoller implements Runnable {
         private final MulticastSocket socket;
         private final InetAddress group;
 
-        public ClipboardListener(MulticastSocket socket, InetAddress group) {
+        public ClipboardPoller(MulticastSocket socket, InetAddress group) {
             this.socket = socket;
             this.group = group;
         }
 
         @Override
-        public void flavorsChanged(FlavorEvent e) {
-            if (!isRemoteUpdate.get()) {
-                try {
+        public void run() {
+            try {
+                while (!Thread.interrupted()) {
                     Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
                     if (clipboard.isDataFlavorAvailable(DataFlavor.stringFlavor)) {
                         String data = (String) clipboard.getData(DataFlavor.stringFlavor);
-                        byte[] buffer = data.getBytes("UTF-8");
-                        System.out.println("Sending: " + data);
-                        DatagramPacket packet = new DatagramPacket(buffer, buffer.length, group, PORT);
-                        socket.send(packet);
+                        if (!data.equals(lastClipboardContent) && !isRemoteUpdate.get()) {
+                            lastClipboardContent = data;
+                            byte[] buffer = data.getBytes("UTF-8");
+                            DatagramPacket packet = new DatagramPacket(buffer, buffer.length, group, PORT);
+                            socket.send(packet);
+
+                            // 打印新增的字符串
+                            System.out.println("Detected new clipboard content: " + data);
+                        }
                     }
-                } catch (IOException | UnsupportedFlavorException | IllegalStateException ex) {
-                    System.err.println("Error in clipboard listener: " + ex.getMessage());
+                    Thread.sleep(1000); // 每秒检查一次
                 }
+            } catch (IOException | UnsupportedFlavorException | InterruptedException | IllegalStateException e) {
+                System.err.println("Error in clipboard polling thread: " + e.getMessage());
             }
         }
     }
