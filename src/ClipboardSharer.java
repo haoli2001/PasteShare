@@ -52,18 +52,18 @@ public class ClipboardSharer {
                     String received = new String(packet.getData(), 0, packet.getLength(), "UTF-8");
 
                     //解析接收到的消息
-                    if (received.startsWith("ID")) {
+                    if (received.startsWith("[ID]")) {
                         String[] split = received.split(":",2);
                         if (split.length == 2) {
-                            String id = split[1];
-                            if (!id.equals(deviceId)) {
-                                System.out.println("Received and updated clipboard: " + received);
-                                // 更新剪切板
-                                isRemoteUpdate.set(true);
-                                Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
-                                clipboard.setContents(new StringSelection(received), null);
-                                isRemoteUpdate.set(false);
-                            }
+                            String senderId = split[0].substring(4);
+                            String clipboardContent = split[1];
+                            if(senderId.equals(deviceId)) continue;//如果与自身uuid相同就不接收
+                            // 更新剪切板
+                            isRemoteUpdate.set(true);
+                            Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
+                            clipboard.setContents(new StringSelection(received), null);
+                            isRemoteUpdate.set(false);
+                            System.out.println("Received clipboard content from " + senderId + ": " + clipboardContent);
                         }
                     }
 
@@ -89,9 +89,9 @@ public class ClipboardSharer {
                 while (!Thread.interrupted()) {
                     Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
                     DataFlavor[] flavors = clipboard.getAvailableDataFlavors();
-                    for (DataFlavor flavor : flavors) {
-                        System.out.println("Available DataFlavor: " + flavor);
-                    }
+//                    for (DataFlavor flavor : flavors) {
+//                        System.out.println("Available DataFlavor: " + flavor);
+//                    }
                     if (clipboard.isDataFlavorAvailable(DataFlavor.stringFlavor)) {
                         String data = (String) clipboard.getData(DataFlavor.stringFlavor);
                         // 限制数据包大小
