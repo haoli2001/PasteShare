@@ -78,6 +78,10 @@ public class ClipboardSharer {
             try {
                 while (!Thread.interrupted()) {
                     Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
+                    DataFlavor[] flavors = clipboard.getAvailableDataFlavors();
+                    for (DataFlavor flavor : flavors) {
+                        System.out.println("Available DataFlavor: " + flavor);
+                    }
                     if (clipboard.isDataFlavorAvailable(DataFlavor.stringFlavor)) {
                         String data = (String) clipboard.getData(DataFlavor.stringFlavor);
                         // 限制数据包大小
